@@ -24,8 +24,8 @@ KANAL_ETIKETLER = {
 def veri_yukle(dosya_yolu: str = None) -> pd.DataFrame:
     """Excel dosyasını yükler ve döndürür."""
     if dosya_yolu is None:
-        base = Path(__file__).resolve().parent.parent
-        dosya_yolu = base / "Data" / "Dijital_Reklam_Veri_Seti_2024_2025.xlsx"
+        base = Path(__file__).resolve().parent
+        dosya_yolu = base / "Dijital_Reklam_Veri_Seti_2024_2025.xlsx"
 
     df = pd.read_excel(dosya_yolu, sheet_name="Ana_Veri_Seti", header=2)
     df.columns = df.columns.str.strip()
@@ -82,16 +82,34 @@ def ozellik_hazirla(df: pd.DataFrame) -> tuple:
     return X, y
 
 def veri_ozeti(df: pd.DataFrame) -> dict:
-    """Arayüzde gösterilecek temel istatistikleri döndürür."""
+    """
+    Arayüzde gösterilecek temel istatistikleri döndürür.
+    Toplam_Reklam_Harcamasi_TL ve ROAS sütunları yoksa otomatik hesaplar;
+    kullanıcı verisi yüklendiğinde hata oluşmasını önler.
+    """
+    df = df.copy()
+
+    # Toplam harcama: sütun yoksa kanal toplamından hesapla
+    if "Toplam_Reklam_Harcamasi_TL" not in df.columns:
+        df["Toplam_Reklam_Harcamasi_TL"] = df[KANALLAR].sum(axis=1)
+
+    # ROAS: sütun yoksa Ciro / Toplam Harcama olarak hesapla (sıfır bölme korumalı)
+    if "ROAS" not in df.columns:
+        toplam_h = df["Toplam_Reklam_Harcamasi_TL"].replace(0, np.nan)
+        df["ROAS"] = df["Ciro_TL"] / toplam_h
+
+    # Stok_Yok: kullanıcı şablonunda olmayabilir
+    stok_yok = int(df["Stok_Yok"].sum()) if "Stok_Yok" in df.columns else 0
+
     return {
-        "gozlem_sayisi"         : len(df),
-        "toplam_ciro"           : df["Ciro_TL"].sum(),
-        "toplam_harcama"        : df["Toplam_Reklam_Harcamasi_TL"].sum(),
-        "ortalama_roas"         : df["ROAS"].mean(),
-        "max_ciro_ay"           : df.loc[df["Ciro_TL"].idxmax(), "Ay"],
-        "min_ciro_ay"           : df.loc[df["Ciro_TL"].idxmin(), "Ay"],
-        "kampanya_sayisi"       : int(df["Kampanya_Donemi"].sum()),
-        "stok_yok_sayisi"       : int(df["Stok_Yok"].sum()),
+        "gozlem_sayisi"   : len(df),
+        "toplam_ciro"     : df["Ciro_TL"].sum(),
+        "toplam_harcama"  : df["Toplam_Reklam_Harcamasi_TL"].sum(),
+        "ortalama_roas"   : round(float(df["ROAS"].mean()), 2),
+        "max_ciro_ay"     : df.loc[df["Ciro_TL"].idxmax(), "Ay"],
+        "min_ciro_ay"     : df.loc[df["Ciro_TL"].idxmin(), "Ay"],
+        "kampanya_sayisi" : int(df["Kampanya_Donemi"].sum()),
+        "stok_yok_sayisi" : stok_yok,
     }
 
 # ── Test ──────────────────────────────────────────────────────────────────────
